@@ -280,14 +280,13 @@ $root  = new root(uniqid(''));
 
 //print_r($root);
 
-define ('DEMO_NODES',50);
+define ('DEMO_NODES',500);
 
 $_uid_cache = array();
 echo "building UID cache ... ";
 for ($i=0;$i<DEMO_NODES;$i++) {
     $__uid = uniqid('');
     $_uid_cache[] = $__uid;
-    echo "$__uid\n";
 }
 
 echo " done\n";
@@ -299,8 +298,6 @@ try {
     for ($_i = 0; $_i < DEMO_NODES; $_i++) {
         $node = null;
 
-        echo $_uid_cache[$_i]."\n";
-
         $_pnode_pos = rand(0, count($root->flatNodes));
 
         if ($_pnode_pos != 0) {
@@ -308,14 +305,12 @@ try {
         } else {
             $pnode = null;
         }
-        echo "$_pnode_pos : ".$pnode->UID.' ';
 
         $s = microtime_float();
         $uid = $_uid_cache[$_i];
-        echo " - uid:$uid - ";
-        $node = new node($uid, $pnode);
+        $node = new node($uid);
 
-        // $_uid_cache[$i] = null;
+        $_uid_cache[$i] = null;
 
         $globals['ut_node_create'] =+ (microtime_float() - $s);
 
