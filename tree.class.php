@@ -1,15 +1,40 @@
 <?php
-
+/**
+ * Very simple & fast tree
+ * usable for threaded discussion forums
+ */
 // -- tree definition
+/**
+ * tree node
+ */
 class node {
-    // payload
+    // payload - place for your (db)fields
 
     // core
-    // dbFields
+
+    #region dbFields
+    /**
+     * @var string unique node ID
+     */
     public $UID;
+    /**
+     * @var string parent node ID
+     */
     public $parentUID;
+    /**
+     * @var int creation time (unix time stamp)
+     */
     public $cTime;
+    /**
+     * @var int node level within tree
+     */
     public $nodeLevel;
+
+    /**
+     * @var string Root node uid - distinguishes trees
+     */
+    protected $ROOTnode;
+    #endregion
 
     // runtime
     private $parentPtr;
@@ -22,7 +47,12 @@ class node {
 
     protected static $ROOT;
 
-    public function __construct($UID) {
+    /**
+     * node constructor.
+     * @param $UID - unique text key
+     * @param $payloadFields - assoc. array of payload fields from definition
+     */
+    public function __construct($UID, $payloadFields = NULL) {
         // echo "NODE: $UID\n";
         $this->contentNodes = array();
         $this->UID = $UID;
@@ -30,8 +60,22 @@ class node {
 
         $this->prevNode = NULL;
         $this->nextNode = NULL;
+
+        $this->rootPath = array();
+
+        // payload settings - direct hard setting is more optimal
+        if (!is_null($payloadFields))
+            foreach($payloadFields as $f => $v){
+                if(property_exists((get_class($this)),$f)) /// can be omitted if sure $payloadFields contains valid fields
+                    $this->$f = $v;
+            }
     }
 
+    /**
+     * adds node
+     * @param object $node - instantiated node object
+     * @return mixed - link to the added node
+     */
     public function add( $node ){
         $node->parentUID = $this->UID;
         $node->parentPtr = &$this;
@@ -53,10 +97,18 @@ class node {
 
     }
 
+    /**
+     * remeves node from tree including subnodes
+     * @param $nodeUID
+     */
     public function remove ( $nodeUID ){
         $this->contentNodes[$nodeUID] = NULL;
     }
 
+    /**
+     * renders tree node visually
+     * @param string $target
+     */
     public function render( $target = 'JSON'){
         switch($target){
             case 'JSON':
@@ -86,6 +138,9 @@ class node {
 
     }
 
+    /**
+     * destructor
+     */
     public function __destruct() {
         // TODO: Implement __destruct() method.
         foreach($this->contentNodes as $uid=>$node)
@@ -98,29 +153,60 @@ class node {
         $this->level = NULL;
     }
 
+    /**
+     * property getter
+     * @param $prop
+     * @return mixed
+     */
     public function __get($prop){
         if (property_exists($this,$prop))
             return $this->$prop;
     }
 }
 
+/**
+ * Class root
+ *
+ */
 class root extends node {
 
+    /**
+     * node cache && flat accessor to nodes
+     * @var array
+     */
     public $flatNodes;
+
+    /**
+     * level based cache - not yet used
+     * @var array
+     */
     private $levelCache;
 
+    /**
+     * db link
+     * @var link
+     */
     private static $db = NULL;
 
+    /**
+     * root constructor.
+     * @param $UID
+     */
     public function __construct($UID){
         parent::__construct($UID);
         $this->flatNodes = array();
         node::$ROOT = &$this;
     }
 
+    /**
+     * @param $node
+     * @param null $parentNode
+     * @throws Exception when duplicity found
+     */
     public function addNode($node,$parentNode = NULL){
 
         if(isset($this->flatNodes[$node->UID])){
-            throw new Exception('Node alredy exists!');
+            throw new Exception('Node alredy exists! '."\n node: ".$node->UID." - pNode:".$parentNode->UID."\n" );
         }
 
         if(!is_null($parentNode)){
@@ -130,31 +216,47 @@ class root extends node {
         }
     }
 
+    /**
+     *
+     * @param $nodeUID
+     */
     public function dropNode($nodeUID){
 
         $this->flatNodes[$nodeUID] = NULL;
 
     }
 
+    /**
+     * strores node in database
+     * @param $node
+     */
     public static function dbSaveNode($node){
 
     }
 
+    /**
+     * deletes node from database
+     * @param $nodeUID
+     */
     public static function dbDropNode ($nodeUID){
 
     }
 
+    /**
+     * loads complete tree from db and
+     * @return $tree
+     */
     public static function dbLoadData(){
 
+        $tree = new root();
+        return $tree;
     }
 }
 
 
 ///
-// SQL
+// MySQL definitions
 /*
-    C
-
 
 
  */
@@ -162,7 +264,7 @@ class root extends node {
 // -- api - controller
 
 
-// -- tests
+// -- tests - runs from commandline, creates 5000 nodes tree and dumps it to the console
 function microtime_float()
 {
     list($usec, $sec) = explode(" ", microtime());
@@ -174,62 +276,70 @@ $ut_node_add = 0;
 //$ut_root_add = 0;
 
 
-
 $root  = new root(uniqid(''));
 
 //print_r($root);
 
-define ('DEMO_NODES',5000);
+define ('DEMO_NODES',50);
 
 $_uid_cache = array();
 echo "building UID cache ... ";
-for ($i=0;$i<DEMO_NODES;$i++)
-    $_uid_cache[] = uniqid('');
+for ($i=0;$i<DEMO_NODES;$i++) {
+    $__uid = uniqid('');
+    $_uid_cache[] = $__uid;
+    echo "$__uid\n";
+}
+
 echo " done\n";
 
 $time_start = microtime_float();
 $_all_nodes = array();
 try {
 
-    for ($i = 0; $i < DEMO_NODES; $i++) {
+    for ($_i = 0; $_i < DEMO_NODES; $_i++) {
         $node = null;
 
-        $_pnode_pos = rand(0, floor(count($root->flatNodes)/1.5));
+        echo $_uid_cache[$_i]."\n";
+
+        $_pnode_pos = rand(0, count($root->flatNodes));
 
         if ($_pnode_pos != 0) {
-            $pNode = $_all_nodes[$_pnode_pos];
+            $pnode = $_all_nodes[$_pnode_pos];
         } else {
-            $pNode = NULL;
+            $pnode = null;
         }
+        echo "$_pnode_pos : ".$pnode->UID.' ';
 
         $s = microtime_float();
-        $node = new node($_uid_cache[$i], $pNode);
-        $_uid_cache[$i] = NULL;
-        $GLOBALS['ut_node_create'] =+ (microtime_float() - $s);
+        $uid = $_uid_cache[$_i];
+        echo " - uid:$uid - ";
+        $node = new node($uid, $pnode);
+
+        // $_uid_cache[$i] = null;
+
+        $globals['ut_node_create'] =+ (microtime_float() - $s);
+
         $_all_nodes[] = $node;
 
+
         $s = microtime_float();
-        if (is_null($pNode)) {
+        if (is_null($pnode)) {
             $root->add($node);
         } else {
-            $root->addNode($node,$pNode);
+            $root->addnode($node,$pnode);
         }
-        $GLOBALS['ut_node_add'] += (microtime_float() - $s);
+        $globals['ut_node_add'] += (microtime_float() - $s);
 
     }
     $time_build = microtime_float();
 
 }catch(Exception $ex){
-
-    print_r($root);
+//    print_r($root);
     echo "\n------------------------------------\n\n";
-    print_r($ex);
-
-
+  print_r($ex->getMessage());
 }
 
 $root->render('text');
-
 $time_render = microtime_float();
 
 echo "built: ".($time_build - $time_start)."\n";
